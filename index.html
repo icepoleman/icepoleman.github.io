@@ -419,6 +419,9 @@
     transform-origin: 0 0;
   }
 </style>
+<!-- Firebase compat SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
 </head>
 <body>
 
@@ -429,6 +432,9 @@
   <div class="sep"></div>
   <button class="btn" onclick="autoLayout()">📐 自動排版</button>
   <span id="saveIndicator" style="font-size:11px;color:var(--green);opacity:0;transition:opacity .5s;">✅ 已自動儲存</span>
+  <span id="syncIndicator" style="font-size:11px;color:var(--accent);opacity:0;transition:opacity .5s;">☁️ 同步中…</span>
+  <span id="syncOk" style="font-size:11px;color:var(--green);opacity:0;transition:opacity .5s;">☁️ 已同步</span>
+  <span id="onlineStatus" style="font-size:11px;padding:3px 8px;border-radius:4px;background:rgba(79,202,122,.15);color:var(--green);font-weight:700;">● 線上</span>
   <div class="sep"></div>
   <button class="btn danger" onclick="clearAll()">🗑 清空</button>
   <div style="margin-left:auto; display:flex; align-items:center; gap:8px;">
@@ -586,12 +592,69 @@ let edgeIdCounter = 1;
 // ── Map management helpers ──
 const LS_KEY = 'levelEditor_maps';
 
+// ── Firebase setup ──
+const firebaseConfig = {
+  apiKey: "AIzaSyCGkycGDFSnDXft9u4_VfdjQFmQmerwMq8",
+  authDomain: "level-editor-25ad2.firebaseapp.com",
+  databaseURL: "https://level-editor-25ad2-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "level-editor-25ad2",
+  storageBucket: "level-editor-25ad2.firebasestorage.app",
+  messagingSenderId: "1060548137308",
+  appId: "1:1060548137308:web:4e7452798537abf856f199"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+const MAPS_REF = db.ref('maps');
+
+let firebaseReady = false;
+let syncTimer = null;
+
+function showSyncBusy() {
+  const s = document.getElementById('syncIndicator');
+  const ok = document.getElementById('syncOk');
+  if (s) { s.style.opacity='1'; }
+  if (ok) { ok.style.opacity='0'; }
+}
+function showSyncOk() {
+  const s = document.getElementById('syncIndicator');
+  const ok = document.getElementById('syncOk');
+  if (s) { s.style.opacity='0'; }
+  if (ok) { ok.style.opacity='1'; setTimeout(()=>ok.style.opacity='0', 2000); }
+}
+
+// Debounced push to Firebase (300ms after last change)
+function pushToFirebase() {
+  if (!firebaseReady) return;
+  clearTimeout(syncTimer);
+  showSyncBusy();
+  syncTimer = setTimeout(() => {
+    MAPS_REF.set(maps)
+      .then(() => showSyncOk())
+      .catch(e => console.warn('Firebase 同步失敗', e));
+  }, 300);
+}
+
+// Monitor online/offline
+db.ref('.info/connected').on('value', snap => {
+  const el = document.getElementById('onlineStatus');
+  if (snap.val()) {
+    if (el) { el.textContent='● 線上'; el.style.color='var(--green)'; el.style.background='rgba(79,202,122,.15)'; }
+  } else {
+    if (el) { el.textContent='○ 離線'; el.style.color='var(--accent2)'; el.style.background='rgba(247,107,79,.15)'; }
+  }
+});
+
 function persistToLocalStorage() {
   try {
     localStorage.setItem(LS_KEY, JSON.stringify(maps));
     const ind = document.getElementById('saveIndicator');
     if (ind) { ind.style.opacity='1'; setTimeout(()=>ind.style.opacity='0', 1200); }
   } catch(e) { console.warn('localStorage 儲存失敗', e); }
+}
+
+function persist() {
+  persistToLocalStorage();
+  pushToFirebase();
 }
 
 function saveCurrentMap() {
@@ -602,7 +665,7 @@ function saveCurrentMap() {
   m.edges = JSON.parse(JSON.stringify(edges));
   m.nodeIdCounter = nodeIdCounter;
   m.edgeIdCounter = edgeIdCounter;
-  persistToLocalStorage();
+  persist();
 }
 
 function loadMap(id) {
@@ -636,14 +699,14 @@ function addMap(name) {
   const mapName = name || '地圖 ' + (maps.length + 1);
   maps.push({ id, name: mapName, nodes:[], edges:[], nodeIdCounter:1, edgeIdCounter:1 });
   loadMap(id);
-  persistToLocalStorage();
+  persist();
 }
 
 function deleteMap(id) {
   if (maps.length <= 1) { setStatus('至少保留一個地圖'); return; }
   const idx = maps.findIndex(m => m.id === id);
   maps = maps.filter(m => m.id !== id);
-  persistToLocalStorage();
+  persist();
   if (currentMapId === id) {
     const next = maps[Math.max(0, idx - 1)];
     loadMap(next.id);
@@ -657,7 +720,7 @@ function renameMap(id, newName) {
   if (!m) return;
   m.name = newName;
   if (currentMapId === id) document.getElementById('topbarMapName').textContent = newName;
-  persistToLocalStorage();
+  persist();
 }
 
 function renderMapList() {
@@ -1334,7 +1397,7 @@ function importJSON() {
         }));
         currentMapId=null; nodes=[]; edges=[];
         nodeLayer.innerHTML=''; edgeGroup.innerHTML='';
-        persistToLocalStorage();
+        persist();
         loadMap(maps[0].id);
         setStatus('已匯入 ' + maps.length + ' 個地圖');
       } catch(err) { alert('JSON 格式錯誤'); }
@@ -1356,7 +1419,7 @@ function clearAll(silent) {
     const m = maps.find(m => m.id === currentMapId);
     if (m) { m.nodes=[]; m.edges=[]; m.nodeIdCounter=1; m.edgeIdCounter=1; }
   }
-  persistToLocalStorage();
+  persist();
   if (!silent) setStatus('已清空畫布');
 }
 
@@ -1437,26 +1500,75 @@ function _buildSampleMap() {
   setStatus('已載入範例關卡');
 }
 
-// Init
+// Init — load from Firebase, fallback to localStorage
 (function init() {
-  try {
-    const saved = localStorage.getItem(LS_KEY);
-    if (saved) {
-      const arr = JSON.parse(saved);
-      if (Array.isArray(arr) && arr.length > 0) {
-        maps = arr;
+  applyTransform();
+
+  // Listen for Firebase data (real-time sync)
+  MAPS_REF.on('value', snap => {
+    const data = snap.val();
+    if (data && Array.isArray(data) && data.length > 0) {
+      const prevId = currentMapId;
+      maps = data;
+      firebaseReady = true;
+
+      if (!currentMapId) {
+        // First load
         currentMapId = null;
         loadMap(maps[0].id);
         renderMapList();
-        applyTransform();
-        setStatus('✅ 已從瀏覽器自動讀取 ' + maps.length + ' 個地圖');
-        return;
+        setStatus('☁️ 已從雲端載入 ' + maps.length + ' 個地圖');
+      } else {
+        // Someone else edited — re-sync silently
+        // Only update maps array; don't disrupt current editing
+        // Reload current map data from remote
+        const remote = maps.find(m => m.id === currentMapId);
+        if (remote) {
+          // merge remote into local (remote wins)
+          // but only if user isn't actively dragging
+          if (!draggingNode && !connectingFrom) {
+            maps = data;
+            const cur = maps.find(m => m.id === currentMapId);
+            if (cur) {
+              nodes = JSON.parse(JSON.stringify(cur.nodes));
+              edges = JSON.parse(JSON.stringify(cur.edges));
+              nodeIdCounter = cur.nodeIdCounter || 1;
+              edgeIdCounter = cur.edgeIdCounter || 1;
+              nodeLayer.innerHTML = '';
+              nodes.forEach(n => renderNode(n));
+              renderAllEdges();
+            }
+            renderMapList();
+          }
+        }
       }
+      // Also keep localStorage in sync
+      persistToLocalStorage();
+      return;
     }
-  } catch(e) {}
-  loadDefault();
-  renderMapList();
-  applyTransform();
+
+    // Firebase empty — try localStorage
+    firebaseReady = true;
+    try {
+      const saved = localStorage.getItem(LS_KEY);
+      if (saved) {
+        const arr = JSON.parse(saved);
+        if (Array.isArray(arr) && arr.length > 0) {
+          maps = arr;
+          currentMapId = null;
+          loadMap(maps[0].id);
+          renderMapList();
+          setStatus('✅ 已從瀏覽器讀取 ' + maps.length + ' 個地圖（尚未同步雲端）');
+          pushToFirebase();
+          return;
+        }
+      }
+    } catch(e) {}
+
+    // Nothing anywhere — load default
+    loadDefault();
+    renderMapList();
+  });
 })();
 </script>
 </body>
