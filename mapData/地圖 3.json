@@ -1,0 +1,28 @@
+{
+  "name": "地圖 3",
+  "nodes": [
+    {
+      "id": "n1",
+      "type": "monster",
+      "x": 402,
+      "y": 370,
+      "label": "怪物",
+      "sub": "",
+      "data1": "",
+      "data2": ""
+    },
+    {
+      "id": "n2",
+      "type": "elite",
+      "x": 470,
+      "y": 473,
+      "label": "菁英",
+      "sub": "",
+      "data1": "",
+      "data2": ""
+    }
+  ],
+  "edges": [],
+  "nodeIdCounter": 3,
+  "edgeIdCounter": 1
+}

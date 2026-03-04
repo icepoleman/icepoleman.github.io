@@ -1,0 +1,1463 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>關卡流程編輯器</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=JetBrains+Mono:wght@400;700&display=swap');
+
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #242838;
+    --border: #2e3348;
+    --accent: #4f8ef7;
+    --accent2: #f76b4f;
+    --green: #4fca7a;
+    --yellow: #f7c44f;
+    --purple: #a04ff7;
+    --pink: #f74fa8;
+    --text: #e8ecf4;
+    --text2: #8892aa;
+    --shadow: 0 4px 24px rgba(0,0,0,0.5);
+
+    --node-monster: #c0392b;
+    --node-elite: #8e44ad;
+    --node-chest: #d4a017;
+    --node-spring: #2980b9;
+    --node-story: #27ae60;
+    --node-boss: #e74c3c;
+    --node-start: #16a085;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Noto Sans TC', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── Top Bar ── */
+  .topbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    z-index: 100;
+  }
+
+  .topbar h1 {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: .05em;
+    margin-right: 8px;
+  }
+
+  .chapter-input {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'Noto Sans TC', sans-serif;
+    font-size: 13px;
+    padding: 5px 10px;
+    border-radius: 6px;
+    width: 120px;
+  }
+
+  .btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'Noto Sans TC', sans-serif;
+    font-size: 12px;
+    padding: 5px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all .15s;
+    white-space: nowrap;
+  }
+  .btn:hover { background: var(--border); border-color: var(--accent); color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
+  .btn.primary:hover { background: #3a7de8; }
+  .btn.danger { border-color: var(--accent2); color: var(--accent2); }
+  .btn.danger:hover { background: rgba(247,107,79,.15); }
+
+  .sep { width: 1px; height: 24px; background: var(--border); margin: 0 4px; }
+
+  /* ── Main Layout ── */
+  .main {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* ── Sidebar ── */
+  .sidebar {
+    width: 220px;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    flex-shrink: 0;
+  }
+
+  .sidebar-section {
+    padding: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .sidebar-section h3 {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--text2);
+    margin-bottom: 8px;
+  }
+
+  .node-palette {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .palette-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 10px;
+    border-radius: 7px;
+    border: 1px solid var(--border);
+    cursor: grab;
+    font-size: 12px;
+    font-weight: 500;
+    transition: all .15s;
+    user-select: none;
+  }
+  .palette-item:hover { border-color: currentColor; background: rgba(255,255,255,.04); }
+  .palette-item:active { cursor: grabbing; }
+
+  .palette-dot {
+    width: 10px; height: 10px;
+    border-radius: 3px;
+    flex-shrink: 0;
+  }
+
+  /* ── Canvas ── */
+  .canvas-wrap {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    background:
+      radial-gradient(circle at 20% 30%, rgba(79,142,247,.04) 0%, transparent 50%),
+      radial-gradient(circle at 80% 70%, rgba(160,79,247,.04) 0%, transparent 50%),
+      var(--bg);
+  }
+
+  /* subtle grid */
+  .canvas-wrap::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(var(--border) 1px, transparent 1px),
+      linear-gradient(90deg, var(--border) 1px, transparent 1px);
+    background-size: 40px 40px;
+    opacity: .35;
+    pointer-events: none;
+  }
+
+  #canvas {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    overflow: visible;
+  }
+
+  /* ── SVG Edges ── */
+  .edge-path {
+    fill: none;
+    stroke: var(--accent2);
+    stroke-width: 2.5;
+    marker-end: url(#arrow);
+    cursor: pointer;
+    transition: stroke .15s;
+  }
+  .edge-path:hover { stroke: #fff; stroke-width: 3.5; }
+  .edge-path.selected { stroke: #fff; stroke-width: 3.5; }
+
+  .edge-label-bg {
+    fill: var(--surface2);
+    rx: 4; ry: 4;
+  }
+  .edge-label-text {
+    fill: var(--yellow);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    dominant-baseline: middle;
+    text-anchor: middle;
+    pointer-events: none;
+  }
+
+  /* ── Nodes ── */
+  .node {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    cursor: grab;
+    user-select: none;
+  }
+  .node:active { cursor: grabbing; }
+  .node.selected .node-body { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .node-body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    padding: 8px 14px;
+    border-radius: 8px;
+    min-width: 72px;
+    min-height: 44px;
+    font-size: 13px;
+    font-weight: 700;
+    color: #fff;
+    text-shadow: 0 1px 4px rgba(0,0,0,.5);
+    box-shadow: 0 3px 12px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.15);
+    position: relative;
+    transition: transform .1s, box-shadow .1s;
+    text-align: center;
+    line-height: 1.2;
+  }
+  .node:hover .node-body { transform: scale(1.05); box-shadow: 0 6px 20px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.2); }
+  .node.connect-hover .node-body { transform: scale(1.08); box-shadow: 0 0 0 3px var(--green), 0 6px 20px rgba(79,202,122,.4); outline: none; }
+
+  .node-sub {
+    font-size: 10px;
+    font-weight: 400;
+    opacity: .75;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* connection ports */
+  .port {
+    position: absolute;
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    background: var(--bg);
+    border: 2px solid var(--accent);
+    cursor: crosshair;
+    transition: all .15s;
+    z-index: 10;
+  }
+  .port:hover { background: var(--accent); transform: scale(1.4); }
+  .port-right { right: -6px; top: 50%; transform: translateY(-50%); }
+  .port-right:hover { transform: translateY(-50%) scale(1.4); }
+  .port-left { left: -6px; top: 50%; transform: translateY(-50%); }
+  .port-left:hover { transform: translateY(-50%) scale(1.4); }
+
+  /* ── Properties Panel ── */
+  .props-panel {
+    width: 220px;
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    flex-shrink: 0;
+  }
+
+  .props-header {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .1em;
+    color: var(--text2);
+  }
+
+  .props-body {
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .prop-row {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .prop-label {
+    font-size: 11px;
+    color: var(--text2);
+    font-weight: 600;
+  }
+
+  .prop-input, .prop-select {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'Noto Sans TC', sans-serif;
+    font-size: 13px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    width: 100%;
+    transition: border-color .15s;
+  }
+  .prop-input:focus, .prop-select:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+
+  .prop-empty {
+    padding: 40px 14px;
+    text-align: center;
+    color: var(--text2);
+    font-size: 12px;
+    line-height: 1.6;
+  }
+
+  .prop-empty .icon { font-size: 28px; margin-bottom: 8px; }
+
+  /* ── Status Bar ── */
+  .statusbar {
+    padding: 4px 16px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--text2);
+    display: flex;
+    gap: 16px;
+    flex-shrink: 0;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+
+  /* ── Map List ── */
+  .map-list { display:flex; flex-direction:column; gap:4px; }
+  .map-item {
+    display:flex; align-items:center; gap:6px;
+    padding:6px 8px; border-radius:7px;
+    border:1px solid var(--border);
+    cursor:pointer; font-size:12px; font-weight:500;
+    transition:all .15s; user-select:none;
+    background: var(--surface2);
+  }
+  .map-item:hover { border-color:var(--accent); color:var(--accent); }
+  .map-item.active {
+    border-color:var(--accent); background:rgba(79,142,247,.15);
+    color:var(--accent); font-weight:700;
+  }
+  .map-item-name {
+    flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  }
+  .map-item-name-input {
+    flex:1; background:transparent; border:none; outline:none;
+    color:var(--accent); font-family:inherit; font-size:12px; font-weight:700;
+    min-width:0;
+  }
+  .map-del-btn {
+    opacity:0; font-size:11px; color:var(--accent2);
+    cursor:pointer; padding:1px 4px; border-radius:4px;
+    transition:opacity .15s;
+    flex-shrink:0;
+  }
+  .map-item:hover .map-del-btn { opacity:1; }
+  .map-add-btn {
+    width:100%; padding:6px; border-radius:7px;
+    border:1px dashed var(--border); background:transparent;
+    color:var(--text2); font-size:12px; cursor:pointer;
+    transition:all .15s; font-family:inherit;
+    margin-top:2px;
+  }
+  .map-add-btn:hover { border-color:var(--green); color:var(--green); }
+  /* ── Context Menu ── */
+  .ctx-menu {
+    position: fixed;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 4px;
+    box-shadow: var(--shadow);
+    z-index: 9999;
+    min-width: 140px;
+    display: none;
+  }
+  .ctx-menu.show { display: block; }
+  .ctx-item {
+    padding: 7px 12px;
+    font-size: 12px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background .1s;
+  }
+  .ctx-item:hover { background: var(--border); }
+  .ctx-item.danger { color: var(--accent2); }
+  .ctx-item.danger:hover { background: rgba(247,107,79,.15); }
+
+  /* ── Drag preview line ── */
+  #drag-line { pointer-events: none; }
+
+  /* ── Scrollable canvas container ── */
+  .canvas-inner {
+    position: absolute;
+    transform-origin: 0 0;
+  }
+</style>
+</head>
+<body>
+
+<!-- Top Bar -->
+<div class="topbar">
+  <h1>⚔ 關卡編輯器</h1>
+  <span id="topbarMapName" style="font-size:13px;font-weight:700;color:var(--text2);min-width:80px;"></span>
+  <div class="sep"></div>
+  <button class="btn" onclick="autoLayout()">📐 自動排版</button>
+  <span id="saveIndicator" style="font-size:11px;color:var(--green);opacity:0;transition:opacity .5s;">✅ 已自動儲存</span>
+  <div class="sep"></div>
+  <button class="btn danger" onclick="clearAll()">🗑 清空</button>
+  <div style="margin-left:auto; display:flex; align-items:center; gap:8px;">
+    <span style="font-size:11px; color:var(--text2)">縮放</span>
+    <button class="btn" onclick="zoom(-0.1)">－</button>
+    <span id="zoomLabel" style="font-size:12px; font-family:monospace; min-width:38px; text-align:center">100%</span>
+    <button class="btn" onclick="zoom(0.1)">＋</button>
+    <button class="btn" onclick="resetZoom()">重置</button>
+  </div>
+</div>
+
+<!-- Main -->
+<div class="main">
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sidebar-section">
+      <h3>地圖列表</h3>
+      <div class="map-list" id="mapList"></div>
+      <button class="map-add-btn" onclick="addMap()">＋ 新增地圖</button>
+    </div>
+
+    <div class="sidebar-section">
+      <h3>節點類型</h3>
+      <div class="node-palette">
+        <div class="palette-item" style="color:#a5d6a7" draggable="true" data-type="start">
+          <div class="palette-dot" style="background:#16a085"></div>Start
+        </div>
+        <div class="palette-item" style="color:#9fa8da" draggable="true" data-type="prep">
+          <div class="palette-dot" style="background:#5c6bc0"></div>整備室
+        </div>
+        <div class="palette-item" style="color:#ef9a9a" draggable="true" data-type="monster">
+          <div class="palette-dot" style="background:#c0392b"></div>怪物
+        </div>
+        <div class="palette-item" style="color:#ce93d8" draggable="true" data-type="elite">
+          <div class="palette-dot" style="background:#8e44ad"></div>菁英
+        </div>
+        <div class="palette-item" style="color:#81c784" draggable="true" data-type="story">
+          <div class="palette-dot" style="background:#27ae60"></div>劇情格
+        </div>
+        <div class="palette-item" style="color:#ffcc80" draggable="true" data-type="shop">
+          <div class="palette-dot" style="background:#e67e22"></div>野外商店
+        </div>
+        <div class="palette-item" style="color:#64b5f6" draggable="true" data-type="spring">
+          <div class="palette-dot" style="background:#2980b9"></div>溫泉
+        </div>
+        <div class="palette-item" style="color:#ffd54f" draggable="true" data-type="chest">
+          <div class="palette-dot" style="background:#d4a017"></div>寶箱
+        </div>
+        <div class="palette-item" style="color:#ff6b6b" draggable="true" data-type="boss">
+          <div class="palette-dot" style="background:#7b0000"></div>Boss
+        </div>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <h3>操作說明</h3>
+      <div style="font-size:11px; color:var(--text2); line-height:1.8;">
+        <div>🖱 拖曳節點到畫布</div>
+        <div>🔗 拖曳●或 Shift拖曳節點連線</div>
+        <div>✏️ 點選節點編輯</div>
+        <div>🖱️ 右鍵刪除</div>
+        <div>📌 拖曳移動節點</div>
+        <div>🔍 滾輪縮放畫布</div>
+        <div>✋ 空白處拖曳平移</div>
+      </div>
+    </div>
+
+
+  </div>
+
+  <!-- Canvas -->
+  <div class="canvas-wrap" id="canvasWrap"
+    ondragover="onDragOver(event)"
+    ondrop="onDrop(event)">
+    <svg id="svgLayer" style="position:absolute;top:0;left:0;width:100%;height:100%;overflow:visible;pointer-events:none;">
+      <defs>
+        <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" fill="#f76b4f"/>
+        </marker>
+        <marker id="arrow-sel" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" fill="#fff"/>
+        </marker>
+      </defs>
+      <g id="edgeGroup" style="pointer-events:all;"></g>
+      <line id="drag-line" stroke="var(--accent)" stroke-width="2" stroke-dasharray="6,4" style="display:none;"/>
+    </svg>
+    <div id="nodeLayer" style="position:absolute;top:0;left:0;width:100%;height:100%;"></div>
+  </div>
+
+  <!-- Properties Panel -->
+  <div class="props-panel">
+    <div class="props-header">屬性面板</div>
+    <div id="propsBody">
+      <div class="prop-empty">
+        <div class="icon">🎯</div>
+        <div>點選節點或連線<br>來編輯屬性</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Status Bar -->
+<div class="statusbar">
+  <span>節點: <span id="nodeCount">0</span></span>
+  <span>連線: <span id="edgeCount">0</span></span>
+  <span id="statusMsg">就緒</span>
+</div>
+
+<!-- Context Menu -->
+<div class="ctx-menu" id="ctxMenu">
+  <div class="ctx-item" id="ctxEdit">✏️ 編輯屬性</div>
+  <div class="ctx-item danger" id="ctxDelete">🗑 刪除</div>
+</div>
+
+<script>
+// ══════════════════════════════════════
+//  State
+// ══════════════════════════════════════
+const NODE_COLORS = {
+  start:   '#16a085',
+  prep:    '#5c6bc0',
+  monster: '#c0392b',
+  elite:   '#8e44ad',
+  story:   '#27ae60',
+  shop:    '#e67e22',
+  spring:  '#2980b9',
+  chest:   '#d4a017',
+  boss:    '#7b0000',
+};
+const NODE_LABELS = {
+  start:   'Start',
+  prep:    '整備室',
+  monster: '怪物',
+  elite:   '菁英',
+  story:   '劇情格',
+  shop:    '野外商店',
+  spring:  '溫泉',
+  chest:   '寶箱',
+  boss:    'Boss',
+};
+
+// ── Multi-map state ──
+let maps = [];          // [{id, name, nodes, edges, nodeIdCounter, edgeIdCounter}]
+let currentMapId = null;
+
+let nodes = [];
+let edges = [];
+let selectedNode = null;
+let selectedEdge = null;
+let nodeIdCounter = 1;
+let edgeIdCounter = 1;
+
+// ── Map management helpers ──
+const LS_KEY = 'levelEditor_maps';
+
+function persistToLocalStorage() {
+  try {
+    localStorage.setItem(LS_KEY, JSON.stringify(maps));
+    const ind = document.getElementById('saveIndicator');
+    if (ind) { ind.style.opacity='1'; setTimeout(()=>ind.style.opacity='0', 1200); }
+  } catch(e) { console.warn('localStorage 儲存失敗', e); }
+}
+
+function saveCurrentMap() {
+  if (!currentMapId) return;
+  const m = maps.find(m => m.id === currentMapId);
+  if (!m) return;
+  m.nodes = JSON.parse(JSON.stringify(nodes));
+  m.edges = JSON.parse(JSON.stringify(edges));
+  m.nodeIdCounter = nodeIdCounter;
+  m.edgeIdCounter = edgeIdCounter;
+  persistToLocalStorage();
+}
+
+function loadMap(id) {
+  saveCurrentMap();
+  const m = maps.find(m => m.id === id);
+  if (!m) return;
+  currentMapId = id;
+
+  // clear canvas
+  nodes = []; edges = [];
+  nodeLayer.innerHTML = '';
+  edgeGroup.innerHTML = '';
+  selectedNode = null; selectedEdge = null;
+  showProps();
+
+  // restore
+  nodeIdCounter = m.nodeIdCounter || 1;
+  edgeIdCounter = m.edgeIdCounter || 1;
+  nodes = JSON.parse(JSON.stringify(m.nodes));
+  edges = JSON.parse(JSON.stringify(m.edges));
+  nodes.forEach(n => renderNode(n));
+  renderAllEdges();
+  updateStats();
+  renderMapList();
+  document.getElementById('topbarMapName').textContent = m.name;
+}
+
+function addMap(name) {
+  saveCurrentMap();
+  const id = 'map' + Date.now();
+  const mapName = name || '地圖 ' + (maps.length + 1);
+  maps.push({ id, name: mapName, nodes:[], edges:[], nodeIdCounter:1, edgeIdCounter:1 });
+  loadMap(id);
+  persistToLocalStorage();
+}
+
+function deleteMap(id) {
+  if (maps.length <= 1) { setStatus('至少保留一個地圖'); return; }
+  const idx = maps.findIndex(m => m.id === id);
+  maps = maps.filter(m => m.id !== id);
+  persistToLocalStorage();
+  if (currentMapId === id) {
+    const next = maps[Math.max(0, idx - 1)];
+    loadMap(next.id);
+  } else {
+    renderMapList();
+  }
+}
+
+function renameMap(id, newName) {
+  const m = maps.find(m => m.id === id);
+  if (!m) return;
+  m.name = newName;
+  if (currentMapId === id) document.getElementById('topbarMapName').textContent = newName;
+  persistToLocalStorage();
+}
+
+function renderMapList() {
+  const el = document.getElementById('mapList');
+  if (!el) return;
+  el.innerHTML = '';
+  maps.forEach(m => {
+    const item = document.createElement('div');
+    item.className = 'map-item' + (m.id === currentMapId ? ' active' : '');
+    item.dataset.id = m.id;
+
+    const nameEl = document.createElement('span');
+    nameEl.className = 'map-item-name';
+    nameEl.textContent = m.name;
+    nameEl.title = '雙擊改名';
+
+    // double-click to rename
+    nameEl.addEventListener('dblclick', e => {
+      e.stopPropagation();
+      const inp = document.createElement('input');
+      inp.className = 'map-item-name-input';
+      inp.value = m.name;
+      nameEl.replaceWith(inp);
+      inp.focus(); inp.select();
+      const done = () => {
+        const v = inp.value.trim() || m.name;
+        renameMap(m.id, v);
+        renderMapList();
+      };
+      inp.addEventListener('blur', done);
+      inp.addEventListener('keydown', e => { if(e.key==='Enter') inp.blur(); if(e.key==='Escape'){ inp.value=m.name; inp.blur(); } });
+    });
+
+    const delBtn = document.createElement('span');
+    delBtn.className = 'map-del-btn';
+    delBtn.textContent = '✕';
+    delBtn.title = '刪除地圖';
+    delBtn.addEventListener('click', e => { e.stopPropagation(); if(confirm('確定刪除「'+m.name+'」？')) deleteMap(m.id); });
+
+    item.appendChild(nameEl);
+    item.appendChild(delBtn);
+    item.addEventListener('click', () => { if(currentMapId !== m.id) loadMap(m.id); });
+    el.appendChild(item);
+  });
+}
+
+// Zoom & pan
+let scale = 1;
+let panX = 0, panY = 0;
+let isPanning = false;
+let panStart = { x: 0, y: 0 };
+
+// Drag node
+let draggingNode = null;
+let dragOffset = { x: 0, y: 0 };
+
+// Connect
+let connectingFrom = null; // { nodeId, portEl }
+
+// Context menu target
+let ctxTarget = null;
+
+const canvasWrap = document.getElementById('canvasWrap');
+const nodeLayer  = document.getElementById('nodeLayer');
+const svgLayer   = document.getElementById('svgLayer');
+const edgeGroup  = document.getElementById('edgeGroup');
+const dragLine   = document.getElementById('drag-line');
+const ctxMenu    = document.getElementById('ctxMenu');
+
+// ══════════════════════════════════════
+//  Coordinate helpers
+// ══════════════════════════════════════
+function clientToCanvas(cx, cy) {
+  const rect = canvasWrap.getBoundingClientRect();
+  return {
+    x: (cx - rect.left - panX) / scale,
+    y: (cy - rect.top  - panY) / scale
+  };
+}
+
+function canvasToScreen(cx, cy) {
+  const rect = canvasWrap.getBoundingClientRect();
+  return {
+    x: cx * scale + panX + rect.left,
+    y: cy * scale + panY + rect.top,
+  };
+}
+
+function applyTransform() {
+  nodeLayer.style.transform = `translate(${panX}px,${panY}px) scale(${scale})`;
+  nodeLayer.style.transformOrigin = '0 0';
+  svgLayer.style.transform = `translate(${panX}px,${panY}px) scale(${scale})`;
+  svgLayer.style.transformOrigin = '0 0';
+  document.getElementById('zoomLabel').textContent = Math.round(scale * 100) + '%';
+}
+
+// ══════════════════════════════════════
+//  Node CRUD
+// ══════════════════════════════════════
+function createNode(type, x, y, label, sub, data1, data2) {
+  const id = 'n' + nodeIdCounter++;
+  const node = {
+    id, type,
+    x, y,
+    label: label || NODE_LABELS[type],
+    sub:   sub   || '',
+    data1: data1 || '',
+    data2: data2 || '',
+  };
+  nodes.push(node);
+  renderNode(node);
+  updateStats();
+  return node;
+}
+
+function renderNode(node) {
+  // remove old
+  const old = document.getElementById('node-' + node.id);
+  if (old) old.remove();
+
+  const el = document.createElement('div');
+  el.className = 'node';
+  el.id = 'node-' + node.id;
+  el.style.left = node.x + 'px';
+  el.style.top  = node.y + 'px';
+
+  el.innerHTML = `
+    <div class="node-body" style="background:${NODE_COLORS[node.type]};">
+      <span>${node.label}</span>
+      ${node.sub ? `<span class="node-sub">${node.sub}</span>` : ''}
+    </div>
+    <div class="port port-right" data-node="${node.id}" data-dir="out"></div>
+    <div class="port port-left"  data-node="${node.id}" data-dir="in"></div>
+  `;
+
+  // Drag node (left click) OR start connecting (right-button-drag replaced by Shift+drag)
+  el.addEventListener('mousedown', e => {
+    if (e.target.classList.contains('port')) return;
+    e.stopPropagation();
+
+    // Shift+drag OR drag from port-right area = start connecting
+    if (e.shiftKey) {
+      connectingFrom = node.id;
+      dragLine.style.display = '';
+      const cp = getPortScreen(node.id, 'out');
+      dragLine.setAttribute('x1', cp.x); dragLine.setAttribute('y1', cp.y);
+      dragLine.setAttribute('x2', cp.x); dragLine.setAttribute('y2', cp.y);
+      return;
+    }
+
+    selectNode(node.id);
+    draggingNode = node.id;
+    const pos = clientToCanvas(e.clientX, e.clientY);
+    dragOffset = { x: pos.x - node.x, y: pos.y - node.y };
+  });
+
+  // Right click
+  el.addEventListener('contextmenu', e => {
+    e.preventDefault();
+    showCtxMenu(e.clientX, e.clientY, 'node', node.id);
+  });
+
+  // Ports — still work as before, plus whole body acts as drop target
+  el.querySelectorAll('.port').forEach(port => {
+    port.addEventListener('mousedown', e => {
+      e.stopPropagation();
+      if (e.target.dataset.dir === 'out') {
+        connectingFrom = node.id;
+        dragLine.style.display = '';
+        const sp = getPortScreen(node.id, 'out');
+        dragLine.setAttribute('x1', sp.x);
+        dragLine.setAttribute('y1', sp.y);
+        dragLine.setAttribute('x2', sp.x);
+        dragLine.setAttribute('y2', sp.y);
+      }
+    });
+  });
+
+  nodeLayer.appendChild(el);
+  if (node.id === selectedNode) el.classList.add('selected');
+}
+
+function getNodeEl(id) { return document.getElementById('node-' + id); }
+
+function getPortScreen(nodeId, dir) {
+  const node = nodes.find(n => n.id === nodeId);
+  if (!node) return { x: 0, y: 0 };
+  const el = getNodeEl(nodeId);
+  const body = el.querySelector('.node-body');
+  const w = body.offsetWidth;
+  const h = body.offsetHeight;
+  if (dir === 'out') return { x: node.x + w / 2, y: node.y };
+  return { x: node.x - w / 2, y: node.y };
+}
+
+function getPortCanvasPos(nodeId, dir) {
+  const node = nodes.find(n => n.id === nodeId);
+  if (!node) return { x: 0, y: 0 };
+  const el = getNodeEl(nodeId);
+  if (!el) return { x: node.x, y: node.y };
+  const body = el.querySelector('.node-body');
+  const w = body.offsetWidth;
+  const h = body.offsetHeight;
+  if (dir === 'out') return { x: node.x + w / 2, y: node.y };
+  return { x: node.x - w / 2, y: node.y };
+}
+
+function deleteNode(id) {
+  nodes = nodes.filter(n => n.id !== id);
+  edges = edges.filter(e => e.from !== id && e.to !== id);
+  const el = getNodeEl(id);
+  if (el) el.remove();
+  if (selectedNode === id) { selectedNode = null; showProps(); }
+  renderAllEdges();
+  updateStats();
+}
+
+function selectNode(id) {
+  document.querySelectorAll('.node.selected').forEach(el => el.classList.remove('selected'));
+  selectedEdge = null;
+  renderAllEdges();
+  selectedNode = id;
+  const el = getNodeEl(id);
+  if (el) el.classList.add('selected');
+  showNodeProps(id);
+}
+
+// ══════════════════════════════════════
+//  Edge CRUD
+// ══════════════════════════════════════
+function createEdge(from, to, label) {
+  // avoid duplicate
+  if (edges.find(e => e.from === from && e.to === to)) return;
+  const id = 'e' + edgeIdCounter++;
+  edges.push({ id, from, to, label: label || '' });
+  renderAllEdges();
+  updateStats();
+}
+
+function deleteEdge(id) {
+  edges = edges.filter(e => e.id !== id);
+  if (selectedEdge === id) { selectedEdge = null; showProps(); }
+  renderAllEdges();
+  updateStats();
+}
+
+function renderAllEdges() {
+  edgeGroup.innerHTML = '';
+  edges.forEach(edge => renderEdge(edge));
+}
+
+function renderEdge(edge) {
+  const fromNode = nodes.find(n => n.id === edge.from);
+  const toNode   = nodes.find(n => n.id === edge.to);
+  if (!fromNode || !toNode) return;
+
+  const fromEl = getNodeEl(edge.from);
+  const toEl   = getNodeEl(edge.to);
+  if (!fromEl || !toEl) return;
+
+  const fb = fromEl.querySelector('.node-body');
+  const tb = toEl.querySelector('.node-body');
+
+  const x1 = fromNode.x + fb.offsetWidth / 2;
+  const y1 = fromNode.y;
+  const x2 = toNode.x - tb.offsetWidth / 2;
+  const y2 = toNode.y;
+
+  const dx = (x2 - x1) * 0.5;
+
+  const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  const d = `M${x1},${y1} C${x1+dx},${y1} ${x2-dx},${y2} ${x2},${y2}`;
+  path.setAttribute('d', d);
+  path.setAttribute('class', 'edge-path' + (selectedEdge === edge.id ? ' selected' : ''));
+  path.setAttribute('marker-end', selectedEdge === edge.id ? 'url(#arrow-sel)' : 'url(#arrow)');
+  path.setAttribute('data-edge', edge.id);
+
+  path.addEventListener('click', e => {
+    e.stopPropagation();
+    selectedNode = null;
+    document.querySelectorAll('.node.selected').forEach(el => el.classList.remove('selected'));
+    selectedEdge = edge.id;
+    renderAllEdges();
+    showEdgeProps(edge.id);
+  });
+  path.addEventListener('contextmenu', e => {
+    e.preventDefault();
+    showCtxMenu(e.clientX, e.clientY, 'edge', edge.id);
+  });
+
+  g.appendChild(path);
+
+  // label
+  if (edge.label) {
+    const mx = (x1 + x2) / 2;
+    const my = (y1 + y2) / 2 - 12;
+    const tw = edge.label.length * 7.5 + 12;
+    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    rect.setAttribute('x', mx - tw/2); rect.setAttribute('y', my - 9);
+    rect.setAttribute('width', tw); rect.setAttribute('height', 18);
+    rect.setAttribute('rx', 4); rect.setAttribute('fill', 'var(--surface2)');
+    rect.setAttribute('stroke', 'var(--border)');
+    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    text.setAttribute('x', mx); text.setAttribute('y', my);
+    text.setAttribute('class', 'edge-label-text');
+    text.textContent = edge.label;
+    g.appendChild(rect);
+    g.appendChild(text);
+  }
+
+  edgeGroup.appendChild(g);
+}
+
+// ══════════════════════════════════════
+//  Properties Panel
+// ══════════════════════════════════════
+function showProps() {
+  document.getElementById('propsBody').innerHTML = `
+    <div class="prop-empty">
+      <div class="icon">🎯</div>
+      <div>點選節點或連線<br>來編輯屬性</div>
+    </div>`;
+}
+
+function showNodeProps(id) {
+  const node = nodes.find(n => n.id === id);
+  if (!node) return;
+  const typeOptions = Object.keys(NODE_LABELS).map(t =>
+    `<option value="${t}" ${t===node.type?'selected':''}>${NODE_LABELS[t]}</option>`
+  ).join('');
+
+  document.getElementById('propsBody').innerHTML = `
+    <div class="props-body">
+      <div class="prop-row">
+        <div class="prop-label">節點類型</div>
+        <select class="prop-select" id="pType">${typeOptions}</select>
+      </div>
+      <div class="prop-row">
+        <div class="prop-label">顯示名稱</div>
+        <input class="prop-input" id="pLabel" value="${node.label}" placeholder="節點名稱"/>
+      </div>
+      <div class="prop-row">
+        <div class="prop-label">副標題（可選）</div>
+        <input class="prop-input" id="pSub" value="${node.sub||''}" placeholder="副標題…"/>
+      </div>
+      <div style="height:1px;background:var(--border);margin:4px 0;"></div>
+      <div style="font-size:10px;color:var(--text2);font-weight:700;text-transform:uppercase;letter-spacing:.08em;margin-bottom:2px;">附加資料（不顯示在畫面）</div>
+      <div class="prop-row">
+        <div class="prop-label">資料欄位 1</div>
+        <input class="prop-input" id="pData1" value="${node.data1||''}" placeholder="自由填寫…"/>
+      </div>
+      <div class="prop-row">
+        <div class="prop-label">資料欄位 2</div>
+        <input class="prop-input" id="pData2" value="${node.data2||''}" placeholder="自由填寫…"/>
+      </div>
+      <button class="btn danger" onclick="deleteNode('${id}')" style="width:100%;margin-top:8px">🗑 刪除節點</button>
+    </div>`;
+
+  function syncNode() {
+    const node = nodes.find(n => n.id === id);
+    if (!node) return;
+    node.type  = document.getElementById('pType').value;
+    node.label = document.getElementById('pLabel').value;
+    node.sub   = document.getElementById('pSub').value;
+    node.data1 = document.getElementById('pData1').value;
+    node.data2 = document.getElementById('pData2').value;
+    renderNode(node);
+    // re-apply selected state (renderNode removes it)
+    const el = getNodeEl(id);
+    if (el) el.classList.add('selected');
+    renderAllEdges();
+    saveCurrentMap();
+  }
+
+  // type change: also update label to default for that type
+  document.getElementById('pType').addEventListener('change', e => {
+    const node = nodes.find(n => n.id === id);
+    if (node) document.getElementById('pLabel').value = NODE_LABELS[e.target.value];
+    syncNode();
+  });
+
+  document.getElementById('pLabel').addEventListener('input', syncNode);
+  document.getElementById('pSub').addEventListener('input', syncNode);
+  document.getElementById('pData1').addEventListener('input', syncNode);
+  document.getElementById('pData2').addEventListener('input', syncNode);
+}
+
+function showEdgeProps(id) {
+  const edge = edges.find(e => e.id === id);
+  if (!edge) return;
+  document.getElementById('propsBody').innerHTML = `
+    <div class="props-body">
+      <div class="prop-row">
+        <div class="prop-label">連線標籤</div>
+        <input class="prop-input" id="eLabel" value="${edge.label||''}" placeholder="如 3 火精靈、1.5"/>
+      </div>
+      <button class="btn danger" onclick="deleteEdge('${id}')" style="width:100%;margin-top:8px">🗑 刪除連線</button>
+    </div>`;
+
+  document.getElementById('eLabel').addEventListener('input', e => {
+    const edge = edges.find(ed => ed.id === id);
+    if (!edge) return;
+    edge.label = e.target.value;
+    renderAllEdges();
+    saveCurrentMap();
+  });
+}
+
+// ══════════════════════════════════════
+//  Drag from Palette
+// ══════════════════════════════════════
+let dragType = null;
+document.querySelectorAll('.palette-item').forEach(item => {
+  item.addEventListener('dragstart', e => {
+    dragType = item.dataset.type;
+  });
+});
+
+function onDragOver(e) { e.preventDefault(); }
+
+function onDrop(e) {
+  e.preventDefault();
+  if (!dragType) return;
+  const pos = clientToCanvas(e.clientX, e.clientY);
+  createNode(dragType, pos.x, pos.y);
+  dragType = null;
+  setStatus('已新增節點');
+}
+
+// ══════════════════════════════════════
+//  Mouse Events (pan, drag node, connect)
+// ══════════════════════════════════════
+canvasWrap.addEventListener('mousedown', e => {
+  if (e.button === 1 || (e.button === 0 && !draggingNode && !connectingFrom)) {
+    if (e.target === canvasWrap || e.target === nodeLayer ||
+        e.target === svgLayer || e.target.tagName === 'svg') {
+      isPanning = true;
+      panStart = { x: e.clientX - panX, y: e.clientY - panY };
+      canvasWrap.style.cursor = 'grabbing';
+      selectedNode = null;
+      selectedEdge = null;
+      document.querySelectorAll('.node.selected').forEach(el => el.classList.remove('selected'));
+      renderAllEdges();
+      showProps();
+    }
+  }
+});
+
+document.addEventListener('mousemove', e => {
+  if (isPanning) {
+    panX = e.clientX - panStart.x;
+    panY = e.clientY - panStart.y;
+    applyTransform();
+    return;
+  }
+
+  if (draggingNode) {
+    const pos = clientToCanvas(e.clientX, e.clientY);
+    const node = nodes.find(n => n.id === draggingNode);
+    if (node) {
+      node.x = pos.x - dragOffset.x;
+      node.y = pos.y - dragOffset.y;
+      const el = getNodeEl(draggingNode);
+      if (el) { el.style.left = node.x + 'px'; el.style.top = node.y + 'px'; }
+      renderAllEdges();
+    }
+    return;
+  }
+
+  if (connectingFrom) {
+    const pos = clientToCanvas(e.clientX, e.clientY);
+    const fromNode = nodes.find(n => n.id === connectingFrom);
+    if (!fromNode) return;
+    const fromEl = getNodeEl(connectingFrom);
+    const fb = fromEl.querySelector('.node-body');
+    dragLine.setAttribute('x1', fromNode.x + fb.offsetWidth / 2);
+    dragLine.setAttribute('y1', fromNode.y);
+    dragLine.setAttribute('x2', pos.x);
+    dragLine.setAttribute('y2', pos.y);
+    // hover highlight
+    document.querySelectorAll('.node.connect-hover').forEach(el => el.classList.remove('connect-hover'));
+    for (const n of nodes) {
+      if (n.id === connectingFrom) continue;
+      const el = getNodeEl(n.id);
+      if (!el) continue;
+      const body = el.querySelector('.node-body');
+      const hw = body.offsetWidth / 2 + 8;
+      const hh = body.offsetHeight / 2 + 8;
+      if (pos.x >= n.x - hw && pos.x <= n.x + hw &&
+          pos.y >= n.y - hh && pos.y <= n.y + hh) {
+        el.classList.add('connect-hover');
+        break;
+      }
+    }
+  }
+});
+
+document.addEventListener('mouseup', e => {
+  isPanning = false;
+  canvasWrap.style.cursor = '';
+  draggingNode = null;
+
+  if (connectingFrom) {
+    // Find which node the mouse is over by checking bounding boxes in canvas coords
+    const pos = clientToCanvas(e.clientX, e.clientY);
+    let hitNode = null;
+    for (const n of nodes) {
+      if (n.id === connectingFrom) continue;
+      const el = getNodeEl(n.id);
+      if (!el) continue;
+      const body = el.querySelector('.node-body');
+      const hw = body.offsetWidth / 2 + 8;
+      const hh = body.offsetHeight / 2 + 8;
+      if (pos.x >= n.x - hw && pos.x <= n.x + hw &&
+          pos.y >= n.y - hh && pos.y <= n.y + hh) {
+        hitNode = n;
+        break;
+      }
+    }
+    if (hitNode) {
+      createEdge(connectingFrom, hitNode.id, '');
+      const newEdge = edges[edges.length - 1];
+      if (newEdge) {
+        selectedEdge = newEdge.id;
+        renderAllEdges();
+        showEdgeProps(newEdge.id);
+      }
+      setStatus('已建立連線，可在右側輸入標籤');
+    }
+    connectingFrom = null;
+    dragLine.style.display = 'none';
+    document.querySelectorAll('.node.connect-hover').forEach(el => el.classList.remove('connect-hover'));
+  }
+});
+
+// Wheel zoom
+canvasWrap.addEventListener('wheel', e => {
+  e.preventDefault();
+  const rect = canvasWrap.getBoundingClientRect();
+  const mouseX = e.clientX - rect.left;
+  const mouseY = e.clientY - rect.top;
+  const delta = e.deltaY < 0 ? 0.1 : -0.1;
+  const newScale = Math.min(3, Math.max(0.2, scale + delta));
+  panX = mouseX - (mouseX - panX) * (newScale / scale);
+  panY = mouseY - (mouseY - panY) * (newScale / scale);
+  scale = newScale;
+  applyTransform();
+}, { passive: false });
+
+// ══════════════════════════════════════
+//  Context Menu
+// ══════════════════════════════════════
+function showCtxMenu(x, y, type, id) {
+  ctxTarget = { type, id };
+  ctxMenu.style.left = x + 'px';
+  ctxMenu.style.top  = y + 'px';
+  ctxMenu.classList.add('show');
+}
+
+document.addEventListener('click', () => ctxMenu.classList.remove('show'));
+document.addEventListener('contextmenu', e => {
+  if (!e.target.closest('.node') && !e.target.closest('.edge-path')) {
+    ctxMenu.classList.remove('show');
+  }
+});
+
+document.getElementById('ctxEdit').addEventListener('click', () => {
+  if (!ctxTarget) return;
+  if (ctxTarget.type === 'node') selectNode(ctxTarget.id);
+  else { selectedEdge = ctxTarget.id; renderAllEdges(); showEdgeProps(ctxTarget.id); }
+});
+document.getElementById('ctxDelete').addEventListener('click', () => {
+  if (!ctxTarget) return;
+  if (ctxTarget.type === 'node') deleteNode(ctxTarget.id);
+  else deleteEdge(ctxTarget.id);
+});
+
+// ══════════════════════════════════════
+//  Zoom controls
+// ══════════════════════════════════════
+function zoom(delta) {
+  scale = Math.min(3, Math.max(0.2, scale + delta));
+  applyTransform();
+}
+function resetZoom() { scale = 1; panX = 0; panY = 0; applyTransform(); }
+
+// ══════════════════════════════════════
+//  Auto Layout (column-based)
+// ══════════════════════════════════════
+function autoLayout() {
+  if (nodes.length === 0) return;
+  // Simple force-like column layout
+  const colW = 180, rowH = 90;
+  const startNode = nodes.find(n => n.type === 'start');
+  if (!startNode) return;
+
+  // BFS to assign columns
+  const visited = new Set();
+  const colMap = {};
+  const queue = [{ id: startNode.id, col: 0 }];
+  visited.add(startNode.id);
+  const colGroups = {};
+
+  while (queue.length > 0) {
+    const { id, col } = queue.shift();
+    if (!colGroups[col]) colGroups[col] = [];
+    colGroups[col].push(id);
+    const outs = edges.filter(e => e.from === id).map(e => e.to);
+    for (const to of outs) {
+      if (!visited.has(to)) {
+        visited.add(to);
+        queue.push({ id: to, col: col + 1 });
+      }
+    }
+  }
+
+  // Nodes not reachable from start
+  let maxCol = Math.max(0, ...Object.keys(colGroups).map(Number));
+  nodes.forEach(n => {
+    if (!visited.has(n.id)) {
+      maxCol++;
+      if (!colGroups[maxCol]) colGroups[maxCol] = [];
+      colGroups[maxCol].push(n.id);
+    }
+  });
+
+  // Assign positions
+  const padding = 80;
+  Object.keys(colGroups).forEach(col => {
+    const group = colGroups[col];
+    const totalH = group.length * rowH;
+    group.forEach((id, i) => {
+      const node = nodes.find(n => n.id === id);
+      if (node) {
+        node.x = padding + Number(col) * colW;
+        node.y = padding + i * rowH + 44; // +44 for node center offset
+      }
+    });
+  });
+
+  nodes.forEach(n => { const el = getNodeEl(n.id); if(el){ el.style.left=n.x+'px'; el.style.top=n.y+'px'; } });
+  renderAllEdges();
+  setStatus('已自動排版');
+}
+
+// ══════════════════════════════════════
+//  Export / Import JSON (backup)
+// ══════════════════════════════════════
+function exportJSON() {
+  saveCurrentMap();
+  const blob = new Blob([JSON.stringify(maps, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download='關卡備份.json'; a.click();
+  setStatus('已匯出備份 JSON');
+}
+function importJSON() {
+  const input = document.createElement('input');
+  input.type='file'; input.accept='.json';
+  input.addEventListener('change', e => {
+    const file = e.target.files[0]; if(!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try {
+        const data = JSON.parse(ev.target.result);
+        const arr = Array.isArray(data) ? data : (data.maps || [data]);
+        if (!arr.length) { alert('找不到地圖資料'); return; }
+        maps = arr.map(m => ({
+          id: m.id || 'map'+Date.now()+Math.random(),
+          name: m.name || '匯入地圖',
+          nodes: m.nodes||[], edges: m.edges||[],
+          nodeIdCounter: m.nodeIdCounter||1, edgeIdCounter: m.edgeIdCounter||1,
+        }));
+        currentMapId=null; nodes=[]; edges=[];
+        nodeLayer.innerHTML=''; edgeGroup.innerHTML='';
+        persistToLocalStorage();
+        loadMap(maps[0].id);
+        setStatus('已匯入 ' + maps.length + ' 個地圖');
+      } catch(err) { alert('JSON 格式錯誤'); }
+    };
+    reader.readAsText(file);
+  });
+  input.click();
+}
+
+function clearAll(silent) {
+  nodes = []; edges = [];
+  nodeLayer.innerHTML = '';
+  edgeGroup.innerHTML = '';
+  selectedNode = null; selectedEdge = null;
+  showProps();
+  updateStats();
+  // sync to current map
+  if (currentMapId) {
+    const m = maps.find(m => m.id === currentMapId);
+    if (m) { m.nodes=[]; m.edges=[]; m.nodeIdCounter=1; m.edgeIdCounter=1; }
+  }
+  persistToLocalStorage();
+  if (!silent) setStatus('已清空畫布');
+}
+
+// ══════════════════════════════════════
+//  Utilities
+// ══════════════════════════════════════
+function updateStats() {
+  document.getElementById('nodeCount').textContent = nodes.length;
+  document.getElementById('edgeCount').textContent = edges.length;
+}
+
+function setStatus(msg) {
+  document.getElementById('statusMsg').textContent = msg;
+  setTimeout(() => { document.getElementById('statusMsg').textContent = '就緒'; }, 2500);
+}
+
+// ══════════════════════════════════════
+//  Load default map (第一章 2-1)
+// ══════════════════════════════════════
+function loadDefault() {
+  // Build first sample map
+  maps = [];
+  currentMapId = null;
+  nodes=[]; edges=[]; nodeIdCounter=1; edgeIdCounter=1;
+
+  // create map 1
+  addMap('地圖 1');
+  _buildSampleMap();
+  saveCurrentMap();
+
+  // create map 2 (empty)
+  addMap('地圖 2');
+
+  // switch back to map 1
+  loadMap(maps[0].id);
+}
+
+function _buildSampleMap() {
+  nodeIdCounter=1; edgeIdCounter=1;
+  const n = (type, x, y, label, sub) => createNode(type, x, y, label, sub);
+
+  const start = n('start',   80,  340, 'Start',    '');
+  const p1    = n('prep',    240, 200, '整備室',   '');
+  const m1    = n('monster', 240, 340, '怪物',     '');
+  const m2    = n('monster', 240, 480, '怪物',     '');
+  const st1   = n('story',   420, 200, '劇情格',   '');
+  const sp1   = n('spring',  420, 370, '溫泉',     '');
+  const sh1   = n('shop',    420, 520, '野外商店', '');
+  const m3    = n('monster', 600, 280, '怪物',     '');
+  const it1   = n('item',    600, 450, '道具格',   '');
+  const p2    = n('prep',    780, 200, '整備室',   '');
+  const m4    = n('monster', 780, 370, '怪物',     '');
+  const sp2   = n('spring',  780, 520, '溫泉',     '');
+  const end_  = n('monster', 960, 360, 'Boss',     '');
+
+  const e = (f, t, l) => createEdge(f, t, l);
+  e(start.id, p1.id,  '');
+  e(start.id, m1.id,  '');
+  e(start.id, m2.id,  '');
+  e(p1.id,    st1.id, '');
+  e(m1.id,    st1.id, '');
+  e(m1.id,    sp1.id, '');
+  e(m2.id,    sp1.id, '');
+  e(m2.id,    sh1.id, '');
+  e(st1.id,   m3.id,  '');
+  e(sp1.id,   m3.id,  '');
+  e(sp1.id,   it1.id, '');
+  e(sh1.id,   it1.id, '');
+  e(m3.id,    p2.id,  '');
+  e(m3.id,    m4.id,  '');
+  e(it1.id,   m4.id,  '');
+  e(it1.id,   sp2.id, '');
+  e(p2.id,    end_.id,'');
+  e(m4.id,    end_.id,'');
+  e(sp2.id,   end_.id,'');
+
+  updateStats();
+  setStatus('已載入範例關卡');
+}
+
+// Init
+(function init() {
+  try {
+    const saved = localStorage.getItem(LS_KEY);
+    if (saved) {
+      const arr = JSON.parse(saved);
+      if (Array.isArray(arr) && arr.length > 0) {
+        maps = arr;
+        currentMapId = null;
+        loadMap(maps[0].id);
+        renderMapList();
+        applyTransform();
+        setStatus('✅ 已從瀏覽器自動讀取 ' + maps.length + ' 個地圖');
+        return;
+      }
+    }
+  } catch(e) {}
+  loadDefault();
+  renderMapList();
+  applyTransform();
+})();
+</script>
+</body>
+</html>

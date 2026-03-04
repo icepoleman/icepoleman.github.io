@@ -1,0 +1,253 @@
+{
+  "name": "地圖 1",
+  "nodes": [
+    {
+      "id": "n1",
+      "type": "start",
+      "x": 80,
+      "y": 340,
+      "label": "Start",
+      "sub": "",
+      "data1": "",
+      "data2": ""
+    },
+    {
+      "id": "n2",
+      "type": "prep",
+      "x": 240,
+      "y": 200,
+      "label": "整備室",
+      "sub": "",
+      "data1": "",
+      "data2": ""
+    },
+    {
+      "id": "n3",
+      "type": "monster",
+      "x": 240,
+      "y": 340,
+      "label": "怪物",
+      "sub": "",
+      "data1": "",
+      "data2": ""
+    },
+    {
+      "id": "n4",
+      "type": "monster",
+      "x": 240,
+      "y": 480,
+      "label": "怪物",
+      "sub": "",
+      "data1": "",
+      "data2": ""
+    },
+    {
+      "id": "n5",
+      "type": "story",
+      "x": 420,
+      "y": 200,
+      "label": "劇情格",
+      "sub": "",
+      "data1": "",
+      "data2": ""
+    },
+    {
+      "id": "n6",
+      "type": "spring",
+      "x": 420,
+      "y": 370,
+      "label": "溫泉",
+      "sub": "",
+      "data1": "",
+      "data2": ""
+    },
+    {
+      "id": "n7",
+      "type": "shop",
+      "x": 420,
+      "y": 520,
+      "label": "野外商店",
+      "sub": "",
+      "data1": "",
+      "data2": ""
+    },
+    {
+      "id": "n8",
+      "type": "monster",
+      "x": 600,
+      "y": 280,
+      "label": "怪物",
+      "sub": "",
+      "data1": "",
+      "data2": ""
+    },
+    {
+      "id": "n9",
+      "type": "item",
+      "x": 600,
+      "y": 450,
+      "label": "道具格",
+      "sub": "",
+      "data1": "",
+      "data2": ""
+    },
+    {
+      "id": "n10",
+      "type": "prep",
+      "x": 780,
+      "y": 200,
+      "label": "整備室",
+      "sub": "",
+      "data1": "",
+      "data2": ""
+    },
+    {
+      "id": "n11",
+      "type": "monster",
+      "x": 780,
+      "y": 370,
+      "label": "怪物",
+      "sub": "",
+      "data1": "",
+      "data2": ""
+    },
+    {
+      "id": "n12",
+      "type": "spring",
+      "x": 780,
+      "y": 520,
+      "label": "溫泉",
+      "sub": "",
+      "data1": "",
+      "data2": ""
+    },
+    {
+      "id": "n13",
+      "type": "monster",
+      "x": 960,
+      "y": 360,
+      "label": "Boss",
+      "sub": "",
+      "data1": "",
+      "data2": ""
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "from": "n1",
+      "to": "n2",
+      "label": ""
+    },
+    {
+      "id": "e2",
+      "from": "n1",
+      "to": "n3",
+      "label": ""
+    },
+    {
+      "id": "e3",
+      "from": "n1",
+      "to": "n4",
+      "label": ""
+    },
+    {
+      "id": "e4",
+      "from": "n2",
+      "to": "n5",
+      "label": ""
+    },
+    {
+      "id": "e5",
+      "from": "n3",
+      "to": "n5",
+      "label": ""
+    },
+    {
+      "id": "e6",
+      "from": "n3",
+      "to": "n6",
+      "label": ""
+    },
+    {
+      "id": "e7",
+      "from": "n4",
+      "to": "n6",
+      "label": ""
+    },
+    {
+      "id": "e8",
+      "from": "n4",
+      "to": "n7",
+      "label": ""
+    },
+    {
+      "id": "e9",
+      "from": "n5",
+      "to": "n8",
+      "label": ""
+    },
+    {
+      "id": "e10",
+      "from": "n6",
+      "to": "n8",
+      "label": ""
+    },
+    {
+      "id": "e11",
+      "from": "n6",
+      "to": "n9",
+      "label": ""
+    },
+    {
+      "id": "e12",
+      "from": "n7",
+      "to": "n9",
+      "label": ""
+    },
+    {
+      "id": "e13",
+      "from": "n8",
+      "to": "n10",
+      "label": ""
+    },
+    {
+      "id": "e14",
+      "from": "n8",
+      "to": "n11",
+      "label": ""
+    },
+    {
+      "id": "e15",
+      "from": "n9",
+      "to": "n11",
+      "label": ""
+    },
+    {
+      "id": "e16",
+      "from": "n9",
+      "to": "n12",
+      "label": ""
+    },
+    {
+      "id": "e17",
+      "from": "n10",
+      "to": "n13",
+      "label": ""
+    },
+    {
+      "id": "e18",
+      "from": "n11",
+      "to": "n13",
+      "label": ""
+    },
+    {
+      "id": "e19",
+      "from": "n12",
+      "to": "n13",
+      "label": ""
+    }
+  ],
+  "nodeIdCounter": 14,
+  "edgeIdCounter": 20
+}

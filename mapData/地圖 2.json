@@ -1,0 +1,18 @@
+{
+  "name": "地圖 2",
+  "nodes": [
+    {
+      "id": "n1",
+      "type": "start",
+      "x": 413,
+      "y": 332,
+      "label": "Start",
+      "sub": "",
+      "data1": "",
+      "data2": ""
+    }
+  ],
+  "edges": [],
+  "nodeIdCounter": 2,
+  "edgeIdCounter": 1
+}
