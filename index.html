@@ -242,6 +242,32 @@
     line-height: 1.2;
   }
   .node:hover .node-body { transform: scale(1.05); box-shadow: 0 6px 20px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.2); }
+
+  .node-difficulty {
+    position: absolute;
+    top: -22px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+    pointer-events: none;
+    display: flex;
+    gap: 4px;
+    align-items: center;
+  }
+  .diff-chip {
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+  }
+  .diff-chip.positive { color: #f76b4f; border-color: #f76b4f44; background: rgba(247,107,79,.12); }
+  .diff-chip.negative { color: #4fca7a; border-color: #4fca7a44; background: rgba(79,202,122,.12); }
+  .diff-chip.zero     { color: var(--text2); }
   .node.connect-hover .node-body { transform: scale(1.08); box-shadow: 0 0 0 3px var(--green), 0 6px 20px rgba(79,202,122,.4); outline: none; }
 
   .node-sub {
@@ -579,6 +605,85 @@ const NODE_LABELS = {
 };
 
 // ── Multi-map state ──
+// ── Difficulty weights ──
+const NODE_DIFFICULTY = {
+  start: 0, prep: 0, story: 0, shop: 0,
+  monster: 1, elite: 2, boss: 3, spring: -2, chest: 0,
+};
+
+// Topological sort + average-of-parents difficulty calculation
+function calcDifficulties() {
+  const result = {};
+
+  // Build in-degree and adjacency
+  const inDegree = {};
+  const outEdges = {};
+  nodes.forEach(n => { inDegree[n.id] = 0; outEdges[n.id] = []; });
+  edges.forEach(e => {
+    if (inDegree[e.to] !== undefined) inDegree[e.to]++;
+    if (outEdges[e.from] !== undefined) outEdges[e.from].push(e.to);
+  });
+
+  // Kahn's algorithm — process nodes in topological order
+  const queue = [];
+  nodes.forEach(n => { if (inDegree[n.id] === 0) queue.push(n.id); });
+
+  // parentSum[id] = { sum, count } — accumulate incoming values before processing
+  const parentSum = {};
+  nodes.forEach(n => parentSum[n.id] = { sum: 0, count: 0 });
+
+  while (queue.length > 0) {
+    const id = queue.shift();
+    const node = nodes.find(n => n.id === id);
+    if (!node) continue;
+
+    const w = NODE_DIFFICULTY[node.type] ?? 0;
+    const ps = parentSum[id];
+
+    if (ps.count === 0) {
+      // no parents (start node or disconnected)
+      result[id] = w;
+    } else {
+      // average of all incoming cumulative values + own weight
+      const avg = ps.sum / ps.count;
+      result[id] = Math.round((avg + w) * 100) / 100; // keep 2 decimal places
+    }
+
+    // propagate to children
+    for (const toId of outEdges[id]) {
+      parentSum[toId].sum += result[id];
+      parentSum[toId].count++;
+      inDegree[toId]--;
+      if (inDegree[toId] === 0) queue.push(toId);
+    }
+  }
+
+  // fallback for any nodes not reached (cycles or isolated)
+  nodes.forEach(n => {
+    if (result[n.id] === undefined) result[n.id] = NODE_DIFFICULTY[n.type] ?? 0;
+  });
+
+  return result;
+}
+
+function updateAllDifficulties() {
+  const diff = calcDifficulties();
+  nodes.forEach(n => {
+    const el = getNodeEl(n.id);
+    if (!el) return;
+    let badge = el.querySelector('.node-difficulty');
+    const val = diff[n.id] ?? 0;
+    const cls = val > 0 ? 'positive' : val < 0 ? 'negative' : 'zero';
+    const sign = val > 0 ? '+' : '';
+    if (!badge) {
+      badge = document.createElement('div');
+      badge.className = 'node-difficulty';
+      el.insertBefore(badge, el.firstChild);
+    }
+    badge.innerHTML = `<span class="diff-chip ${cls}">${sign}${val}</span>`;
+  });
+}
+
 let maps = [];          // [{id, name, nodes, edges, nodeIdCounter, edgeIdCounter}]
 let currentMapId = null;
 
@@ -901,6 +1006,8 @@ function renderNode(node) {
 
   nodeLayer.appendChild(el);
   if (node.id === selectedNode) el.classList.add('selected');
+  // schedule difficulty update after DOM settles
+  setTimeout(updateAllDifficulties, 0);
 }
 
 function getNodeEl(id) { return document.getElementById('node-' + id); }
@@ -970,6 +1077,7 @@ function deleteEdge(id) {
 function renderAllEdges() {
   edgeGroup.innerHTML = '';
   edges.forEach(edge => renderEdge(edge));
+  updateAllDifficulties();
 }
 
 function renderEdge(edge) {
