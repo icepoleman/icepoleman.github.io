@@ -439,6 +439,49 @@
   /* ── Drag preview line ── */
   #drag-line { pointer-events: none; }
 
+  /* ── Floating Save Button ── */
+  #floatSaveBtn {
+    position: fixed;
+    bottom: 40px;
+    right: 28px;
+    display: none;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    background: var(--accent);
+    color: #fff;
+    font-family: 'Noto Sans TC', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    box-shadow: 0 4px 20px rgba(79,142,247,.5);
+    z-index: 9000;
+    animation: floatPop .2s ease;
+    transition: background .15s, transform .1s, box-shadow .15s;
+  }
+  #floatSaveBtn:hover {
+    background: #3a7de8;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 28px rgba(79,142,247,.6);
+  }
+  #floatSaveBtn:active { transform: translateY(0); }
+  @keyframes floatPop {
+    from { opacity:0; transform: translateY(10px) scale(.95); }
+    to   { opacity:1; transform: translateY(0)   scale(1); }
+  }
+  #floatSaveBtn .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #fff;
+    animation: pulse 1.2s infinite;
+  }
+  @keyframes pulse {
+    0%,100% { opacity:1; transform:scale(1); }
+    50%      { opacity:.5; transform:scale(1.4); }
+  }
+
   /* ── Scrollable canvas container ── */
   .canvas-inner {
     position: absolute;
@@ -734,7 +777,7 @@ function pushToFirebase() {
   showSyncBusy();
   syncTimer = setTimeout(() => {
     MAPS_REF.set(maps)
-      .then(() => showSyncOk())
+      .then(() => { showSyncOk(); clearDirty(); })
       .catch(e => console.warn('Firebase 同步失敗', e));
   }, 300);
 }
@@ -757,9 +800,34 @@ function persistToLocalStorage() {
   } catch(e) { console.warn('localStorage 儲存失敗', e); }
 }
 
+let isDirty = false;
+
+function markDirty() {
+  if (!isDirty) {
+    isDirty = true;
+    const btn = document.getElementById('floatSaveBtn');
+    if (btn) btn.style.display = 'flex';
+  }
+}
+
+function clearDirty() {
+  isDirty = false;
+  const btn = document.getElementById('floatSaveBtn');
+  if (btn) btn.style.display = 'none';
+}
+
+function manualSave() {
+  saveCurrentMap();         // sync canvas → maps[]
+  persistToLocalStorage();  // write localStorage
+  pushToFirebase();         // write Firebase
+  clearDirty();
+  setStatus('✅ 已手動儲存');
+}
+
 function persist() {
+  // auto-persist still runs (localStorage only, no Firebase push)
   persistToLocalStorage();
-  pushToFirebase();
+  markDirty();
 }
 
 function saveCurrentMap() {
@@ -1679,5 +1747,11 @@ function _buildSampleMap() {
   });
 })();
 </script>
+
+<!-- Floating Save Button -->
+<button id="floatSaveBtn" onclick="manualSave()">
+  <span class="dot"></span>
+  💾 儲存變更
+</button>
 </body>
 </html>
