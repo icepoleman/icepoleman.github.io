@@ -270,6 +270,48 @@
   .diff-chip.zero     { color: var(--text2); }
   .node.connect-hover .node-body { transform: scale(1.08); box-shadow: 0 0 0 3px var(--green), 0 6px 20px rgba(79,202,122,.4); outline: none; }
 
+  /* multi-select */
+  .node.multi-selected .node-body { outline: 2px solid var(--yellow); outline-offset: 2px; }
+
+  /* lasso selection box */
+  #lasso {
+    position: absolute;
+    border: 2px dashed var(--yellow);
+    background: rgba(247,196,79,.08);
+    pointer-events: none;
+    display: none;
+    z-index: 50;
+  }
+
+  /* wider hit area on edges */
+  .edge-hit {
+    fill: none;
+    stroke: transparent;
+    stroke-width: 14;
+    cursor: pointer;
+  }
+  .edge-hit:hover + .edge-path { stroke: #fff; stroke-width: 3.5; }
+
+  /* multi-select toolbar */
+  #multiToolbar {
+    position: fixed;
+    bottom: 36px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 6px 10px;
+    display: none;
+    gap: 8px;
+    align-items: center;
+    z-index: 999;
+    box-shadow: var(--shadow);
+    font-size: 12px;
+    color: var(--text2);
+  }
+  #multiToolbar.show { display: flex; }
+
   .node-sub {
     font-size: 10px;
     font-weight: 400;
@@ -592,6 +634,7 @@
       <line id="drag-line" stroke="var(--accent)" stroke-width="2" stroke-dasharray="6,4" style="display:none;"/>
     </svg>
     <div id="nodeLayer" style="position:absolute;top:0;left:0;width:100%;height:100%;"></div>
+    <div id="lasso"></div>
   </div>
 
   <!-- Properties Panel -->
@@ -605,6 +648,15 @@
     </div>
   </div>
 
+</div>
+
+<!-- Multi-select toolbar -->
+<div id="multiToolbar">
+  <span id="multiCount">0 個節點已選取</span>
+  <div style="width:1px;height:16px;background:var(--border);"></div>
+  <button class="btn" onclick="copySelected()">📋 複製</button>
+  <button class="btn danger" onclick="deleteSelected()">🗑 刪除</button>
+  <button class="btn" onclick="clearMultiSelect()">✕ 取消</button>
 </div>
 
 <!-- Status Bar -->
@@ -953,6 +1005,14 @@ let dragOffset = { x: 0, y: 0 };
 // Connect
 let connectingFrom = null; // { nodeId, portEl }
 
+// Multi-select
+let multiSelected = new Set(); // node ids
+let isLasso = false;
+let lassoStart = null; // canvas coords
+let lassoRect = null;
+let longPressTimer = null;
+const LONG_PRESS_MS = 350;
+
 // Context menu target
 let ctxTarget = null;
 
@@ -1029,12 +1089,12 @@ function renderNode(node) {
     <div class="port port-left"  data-node="${node.id}" data-dir="in"></div>
   `;
 
-  // Drag node (left click) OR start connecting (right-button-drag replaced by Shift+drag)
+  // Drag node / long-press multi-select / shift-connect
   el.addEventListener('mousedown', e => {
     if (e.target.classList.contains('port')) return;
     e.stopPropagation();
 
-    // Shift+drag OR drag from port-right area = start connecting
+    // Shift+drag = start connecting
     if (e.shiftKey) {
       connectingFrom = node.id;
       dragLine.style.display = '';
@@ -1044,10 +1104,28 @@ function renderNode(node) {
       return;
     }
 
+    // If already in multi-select mode and node is in selection → drag all
+    if (multiSelected.size > 0 && multiSelected.has(node.id)) {
+      draggingNode = node.id; // sentinel; actual multi-drag handled in mousemove
+      const pos = clientToCanvas(e.clientX, e.clientY);
+      dragOffset = { x: pos.x - node.x, y: pos.y - node.y };
+      return;
+    }
+
+    // Long-press to add to multi-select without dragging
+    longPressTimer = setTimeout(() => {
+      longPressTimer = null;
+      toggleMultiSelect(node.id);
+    }, LONG_PRESS_MS);
+
     selectNode(node.id);
     draggingNode = node.id;
     const pos = clientToCanvas(e.clientX, e.clientY);
     dragOffset = { x: pos.x - node.x, y: pos.y - node.y };
+  });
+
+  el.addEventListener('mouseup', e => {
+    if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
   });
 
   // Right click
@@ -1114,6 +1192,7 @@ function deleteNode(id) {
 }
 
 function selectNode(id) {
+  clearMultiSelect();
   document.querySelectorAll('.node.selected').forEach(el => el.classList.remove('selected'));
   selectedEdge = null;
   renderAllEdges();
@@ -1121,6 +1200,73 @@ function selectNode(id) {
   const el = getNodeEl(id);
   if (el) el.classList.add('selected');
   showNodeProps(id);
+}
+
+function toggleMultiSelect(id) {
+  if (multiSelected.has(id)) {
+    multiSelected.delete(id);
+    const el = getNodeEl(id);
+    if (el) el.classList.remove('multi-selected');
+  } else {
+    multiSelected.add(id);
+    const el = getNodeEl(id);
+    if (el) el.classList.add('multi-selected');
+    // deselect single
+    document.querySelectorAll('.node.selected').forEach(el => el.classList.remove('selected'));
+    selectedNode = null;
+  }
+  updateMultiToolbar();
+}
+
+function clearMultiSelect() {
+  multiSelected.forEach(id => {
+    const el = getNodeEl(id);
+    if (el) el.classList.remove('multi-selected');
+  });
+  multiSelected.clear();
+  updateMultiToolbar();
+}
+
+function updateMultiToolbar() {
+  const tb = document.getElementById('multiToolbar');
+  const cnt = document.getElementById('multiCount');
+  if (multiSelected.size > 0) {
+    tb.classList.add('show');
+    cnt.textContent = multiSelected.size + ' 個節點已選取';
+  } else {
+    tb.classList.remove('show');
+  }
+}
+
+function copySelected() {
+  if (multiSelected.size === 0) return;
+  const ids = [...multiSelected];
+  const offsetX = 120, offsetY = 80;
+  const oldToNew = {};
+  ids.forEach(id => {
+    const orig = nodes.find(n => n.id === id);
+    if (!orig) return;
+    const newNode = createNode(orig.type, orig.x + offsetX, orig.y + offsetY, orig.label, orig.sub, orig.data1, orig.data2);
+    oldToNew[id] = newNode.id;
+  });
+  // copy internal edges
+  edges.filter(e => ids.includes(e.from) && ids.includes(e.to)).forEach(e => {
+    createEdge(oldToNew[e.from], oldToNew[e.to], e.label);
+  });
+  // select the new copies
+  clearMultiSelect();
+  Object.values(oldToNew).forEach(id => toggleMultiSelect(id));
+  saveCurrentMap();
+  setStatus('已複製 ' + ids.length + ' 個節點');
+}
+
+function deleteSelected() {
+  if (multiSelected.size === 0) return;
+  const ids = [...multiSelected];
+  clearMultiSelect();
+  ids.forEach(id => deleteNode(id));
+  saveCurrentMap();
+  setStatus('已刪除 ' + ids.length + ' 個節點');
 }
 
 // ══════════════════════════════════════
@@ -1169,25 +1315,33 @@ function renderEdge(edge) {
 
   const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
 
-  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
   const d = `M${x1},${y1} C${x1+dx},${y1} ${x2-dx},${y2} ${x2},${y2}`;
-  path.setAttribute('d', d);
-  path.setAttribute('class', 'edge-path' + (selectedEdge === edge.id ? ' selected' : ''));
-  path.setAttribute('marker-end', selectedEdge === edge.id ? 'url(#arrow-sel)' : 'url(#arrow)');
-  path.setAttribute('data-edge', edge.id);
 
-  path.addEventListener('click', e => {
+  // Wide invisible hit area (easier to click)
+  const hit = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  hit.setAttribute('d', d);
+  hit.setAttribute('class', 'edge-hit');
+  hit.addEventListener('click', e => {
     e.stopPropagation();
+    clearMultiSelect();
     selectedNode = null;
     document.querySelectorAll('.node.selected').forEach(el => el.classList.remove('selected'));
     selectedEdge = edge.id;
     renderAllEdges();
     showEdgeProps(edge.id);
   });
-  path.addEventListener('contextmenu', e => {
+  hit.addEventListener('contextmenu', e => {
     e.preventDefault();
     showCtxMenu(e.clientX, e.clientY, 'edge', edge.id);
   });
+  g.appendChild(hit);
+
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path.setAttribute('d', d);
+  path.setAttribute('class', 'edge-path' + (selectedEdge === edge.id ? ' selected' : ''));
+  path.setAttribute('marker-end', selectedEdge === edge.id ? 'url(#arrow-sel)' : 'url(#arrow)');
+  path.setAttribute('data-edge', edge.id);
+  path.style.pointerEvents = 'none'; // hit area handles clicks
 
   g.appendChild(path);
 
@@ -1332,41 +1486,117 @@ function onDrop(e) {
 //  Mouse Events (pan, drag node, connect)
 // ══════════════════════════════════════
 canvasWrap.addEventListener('mousedown', e => {
-  if (e.button === 1 || (e.button === 0 && !draggingNode && !connectingFrom)) {
-    if (e.target === canvasWrap || e.target === nodeLayer ||
-        e.target === svgLayer || e.target.tagName === 'svg') {
+  const onBackground = e.target === canvasWrap || e.target === nodeLayer ||
+      e.target === svgLayer || e.target.tagName === 'svg' ||
+      e.target.id === 'lasso';
+
+  if (e.button === 1) {
+    if (onBackground) {
       isPanning = true;
       panStart = { x: e.clientX - panX, y: e.clientY - panY };
       canvasWrap.style.cursor = 'grabbing';
-      selectedNode = null;
-      selectedEdge = null;
-      document.querySelectorAll('.node.selected').forEach(el => el.classList.remove('selected'));
-      renderAllEdges();
-      showProps();
     }
+    return;
+  }
+
+  if (e.button === 0 && onBackground && !connectingFrom) {
+    // start lasso (long press on background)
+    const pos = clientToCanvas(e.clientX, e.clientY);
+    lassoStart = pos;
+    lassoRect = { x: pos.x, y: pos.y, w: 0, h: 0 };
+
+    longPressTimer = setTimeout(() => {
+      longPressTimer = null;
+      isLasso = true;
+      const lasso = document.getElementById('lasso');
+      lasso.style.display = 'block';
+      lasso.style.left = (lassoStart.x * scale + panX) + 'px';
+      lasso.style.top  = (lassoStart.y * scale + panY) + 'px';
+      lasso.style.width = '0px'; lasso.style.height = '0px';
+    }, LONG_PRESS_MS);
+
+    // short click on background = pan + deselect
+    isPanning = true;
+    panStart = { x: e.clientX - panX, y: e.clientY - panY };
+    canvasWrap.style.cursor = 'crosshair';
+
+    selectedNode = null;
+    selectedEdge = null;
+    document.querySelectorAll('.node.selected').forEach(el => el.classList.remove('selected'));
+    clearMultiSelect();
+    renderAllEdges();
+    showProps();
   }
 });
 
+// track last mouse position for multi-drag
+let lastMouseCanvas = { x: 0, y: 0 };
+
 document.addEventListener('mousemove', e => {
-  if (isPanning) {
+  if (longPressTimer && (Math.abs(e.movementX) > 3 || Math.abs(e.movementY) > 3)) {
+    clearTimeout(longPressTimer); longPressTimer = null;
+  }
+
+  if (isLasso && lassoStart) {
+    const pos = clientToCanvas(e.clientX, e.clientY);
+    const lasso = document.getElementById('lasso');
+    const rx = Math.min(pos.x, lassoStart.x);
+    const ry = Math.min(pos.y, lassoStart.y);
+    const rw = Math.abs(pos.x - lassoStart.x);
+    const rh = Math.abs(pos.y - lassoStart.y);
+    lassoRect = { x: rx, y: ry, w: rw, h: rh };
+    lasso.style.left   = (rx * scale + panX) + 'px';
+    lasso.style.top    = (ry * scale + panY) + 'px';
+    lasso.style.width  = (rw * scale) + 'px';
+    lasso.style.height = (rh * scale) + 'px';
+    // highlight nodes inside lasso
+    nodes.forEach(n => {
+      const el = getNodeEl(n.id);
+      if (!el) return;
+      const inside = n.x >= rx && n.x <= rx+rw && n.y >= ry && n.y <= ry+rh;
+      if (inside) el.classList.add('multi-selected');
+      else el.classList.remove('multi-selected');
+    });
+    return;
+  }
+
+  if (isPanning && !isLasso) {
     panX = e.clientX - panStart.x;
     panY = e.clientY - panStart.y;
     applyTransform();
     return;
   }
 
+  const curPos = clientToCanvas(e.clientX, e.clientY);
+
   if (draggingNode) {
-    const pos = clientToCanvas(e.clientX, e.clientY);
-    const node = nodes.find(n => n.id === draggingNode);
-    if (node) {
-      node.x = pos.x - dragOffset.x;
-      node.y = pos.y - dragOffset.y;
-      const el = getNodeEl(draggingNode);
-      if (el) { el.style.left = node.x + 'px'; el.style.top = node.y + 'px'; }
-      renderAllEdges();
+    const dx = curPos.x - lastMouseCanvas.x;
+    const dy = curPos.y - lastMouseCanvas.y;
+
+    if (multiSelected.size > 0 && multiSelected.has(draggingNode)) {
+      // move all selected nodes together
+      multiSelected.forEach(id => {
+        const n = nodes.find(n => n.id === id);
+        if (!n) return;
+        n.x += dx; n.y += dy;
+        const el = getNodeEl(id);
+        if (el) { el.style.left = n.x + 'px'; el.style.top = n.y + 'px'; }
+      });
+    } else {
+      const node = nodes.find(n => n.id === draggingNode);
+      if (node) {
+        node.x = curPos.x - dragOffset.x;
+        node.y = curPos.y - dragOffset.y;
+        const el = getNodeEl(draggingNode);
+        if (el) { el.style.left = node.x + 'px'; el.style.top = node.y + 'px'; }
+      }
     }
+    lastMouseCanvas = curPos;
+    renderAllEdges();
     return;
   }
+
+  lastMouseCanvas = curPos;
 
   if (connectingFrom) {
     const pos = clientToCanvas(e.clientX, e.clientY);
@@ -1397,8 +1627,34 @@ document.addEventListener('mousemove', e => {
 });
 
 document.addEventListener('mouseup', e => {
+  if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
   isPanning = false;
   canvasWrap.style.cursor = '';
+
+  if (isLasso) {
+    isLasso = false;
+    const lasso = document.getElementById('lasso');
+    lasso.style.display = 'none';
+    // finalize selection
+    const selected = new Set();
+    if (lassoRect) {
+      nodes.forEach(n => {
+        if (n.x >= lassoRect.x && n.x <= lassoRect.x + lassoRect.w &&
+            n.y >= lassoRect.y && n.y <= lassoRect.y + lassoRect.h) {
+          selected.add(n.id);
+        }
+      });
+    }
+    multiSelected = selected;
+    updateMultiToolbar();
+    if (multiSelected.size > 0) setStatus(multiSelected.size + ' 個節點已選取');
+    draggingNode = null;
+    return;
+  }
+
+  if (draggingNode && multiSelected.size > 0) {
+    saveCurrentMap();
+  }
   draggingNode = null;
 
   if (connectingFrom) {
