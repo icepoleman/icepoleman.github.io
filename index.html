@@ -621,6 +621,7 @@
   <div class="canvas-wrap" id="canvasWrap"
     ondragover="onDragOver(event)"
     ondrop="onDrop(event)">
+    <div id="nodeLayer" style="position:absolute;top:0;left:0;width:100%;height:100%;"></div>
     <svg id="svgLayer" style="position:absolute;top:0;left:0;width:100%;height:100%;overflow:visible;pointer-events:none;">
       <defs>
         <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
@@ -633,7 +634,6 @@
       <g id="edgeGroup" style="pointer-events:all;"></g>
       <line id="drag-line" stroke="var(--accent)" stroke-width="2" stroke-dasharray="6,4" style="display:none;"/>
     </svg>
-    <div id="nodeLayer" style="position:absolute;top:0;left:0;width:100%;height:100%;"></div>
     <div id="lasso"></div>
   </div>
 
@@ -1319,20 +1319,24 @@ function renderEdge(edge) {
 
   // Wide invisible hit area (easier to click)
   const hit = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  const eid = edge.id; // capture in closure
   hit.setAttribute('d', d);
   hit.setAttribute('class', 'edge-hit');
-  hit.addEventListener('click', e => {
+  hit.addEventListener('mousedown', e => {
+    if (e.button !== 0) return;
     e.stopPropagation();
+    e.preventDefault();
     clearMultiSelect();
     selectedNode = null;
     document.querySelectorAll('.node.selected').forEach(el => el.classList.remove('selected'));
-    selectedEdge = edge.id;
+    selectedEdge = eid;
     renderAllEdges();
-    showEdgeProps(edge.id);
+    showEdgeProps(eid);
   });
   hit.addEventListener('contextmenu', e => {
     e.preventDefault();
-    showCtxMenu(e.clientX, e.clientY, 'edge', edge.id);
+    e.stopPropagation();
+    showCtxMenu(e.clientX, e.clientY, 'edge', eid);
   });
   g.appendChild(hit);
 
@@ -1449,7 +1453,7 @@ function showEdgeProps(id) {
         <div class="prop-label">連線標籤</div>
         <input class="prop-input" id="eLabel" value="${edge.label||''}" placeholder="如 3 火精靈、1.5"/>
       </div>
-      <button class="btn danger" onclick="deleteEdge('${id}')" style="width:100%;margin-top:8px">🗑 刪除連線</button>
+      <button class="btn danger" id="edgeDelBtn" style="width:100%;margin-top:8px">🗑 刪除連線</button>
     </div>`;
 
   document.getElementById('eLabel').addEventListener('input', e => {
@@ -1457,7 +1461,14 @@ function showEdgeProps(id) {
     if (!edge) return;
     edge.label = e.target.value;
     renderAllEdges();
+    // re-show props so selectedEdge stays in sync
+    showEdgeProps(id);
     saveCurrentMap();
+  });
+
+  document.getElementById('edgeDelBtn').addEventListener('click', () => {
+    deleteEdge(id);
+    persist();
   });
 }
 
